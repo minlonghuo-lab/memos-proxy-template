@@ -2,109 +2,119 @@
 
 # memos-proxy-template
 
-A minimal but practical **Cloudflare Workers** template for exposing a safer, frontend-consumable **Memos API proxy**.
+一个面向 **Cloudflare Workers** 的 **Memos API 代理模板**。
 
-Designed for personal sites, public status feeds, and "shuoshuo / updates / microblog" pages that need to read content from a self-hosted **Memos** instance without leaking backend credentials.
+适合为自托管 Memos 提供一个更安全、对前端更友好的公开代理层，
+用于博客“说说 / 动态 / 微博客”页面等场景，
+同时避免把后端 Token 直接暴露到浏览器端。
 
 </div>
 
 ---
 
-## Features
+## 项目简介
 
-- **Cloudflare Workers ready** proxy template
-- protects `MEMOS_TOKEN` on the server side
-- proxies common **Memos API** requests
-- directly passes through static file paths such as:
+如果你的前端页面需要读取自托管 Memos 的内容，直接从浏览器请求上游接口通常会遇到几个问题：
+
+- Token 可能泄露到前端
+- CORS 限制导致请求失败
+- 你只想公开 `PUBLIC` 内容，而不是全部内容
+
+这个模板的作用，就是在 **Memos 与前端之间增加一层轻量代理**：
+
+- 由 Worker 代为携带 `MEMOS_TOKEN`
+- 对外提供统一接口
+- 自动过滤掉不应公开的内容
+
+一句话来说：
+
+> 这是一个把 **自托管 Memos → 前端安全公开接口** 的最小可用模板。
+
+---
+
+## 功能特性
+
+- 基于 **Cloudflare Workers**，部署简单
+- 服务端保护 `MEMOS_TOKEN`
+- 支持代理常见的 **Memos API 请求**
+- 直接透传以下静态资源路径：
   - `/file/`
   - `/assets/`
   - `/uploads/`
-- filters `/api/v1/memos` list responses to keep only **`PUBLIC`** memos
-- includes a lightweight `/test` endpoint for environment verification
-- suitable as a starting point for blogs, personal dashboards, and public memo feeds
+- 对 `/api/v1/memos` 列表结果做过滤，仅保留 **`PUBLIC`** 可见性内容
+- 提供 `/test` 端点用于检查环境变量是否配置成功
+- 适合作为博客动态流、公开说说页、状态页的数据来源
 
 ---
 
-## Why This Exists
+## 工作方式说明
 
-If your frontend needs to read data from a self-hosted Memos instance, directly calling the upstream API from the browser usually means one of these problems:
-
-- your token may be exposed
-- your origin/CORS policy may block requests
-- you may want to filter out non-public content before it reaches the client
-
-This template solves that by placing a simple Worker in front of Memos.
-
----
-
-## Behavior Overview
-
-### Static assets passthrough
-The Worker directly proxies these paths to your Memos upstream:
+### 1. 静态资源透传
+以下路径会直接代理到你的 Memos 上游地址：
 
 - `/file/`
 - `/assets/`
 - `/uploads/`
 
-This is useful when memo content references uploaded media or generated assets.
+这对于加载 memo 中引用的图片、附件和静态资源很有用。
 
-### API proxy
-For other request paths, the Worker forwards the request to your Memos instance and adds:
+### 2. API 请求代理
+对于其他请求路径，Worker 会把请求转发到上游 Memos，并自动附带：
 
 ```http
 Authorization: Bearer <MEMOS_TOKEN>
 ```
 
-### Public memo filtering
-When the request path starts with `/api/v1/memos` and the upstream response contains a memo list, the Worker filters the result so that only memos with:
+### 3. PUBLIC 内容过滤
+当请求路径以 `/api/v1/memos` 开头，并且返回结果中包含 `memos` 列表时，Worker 会自动过滤，只保留：
 
 ```text
 visibility === "PUBLIC"
 ```
 
-are returned to the client.
+这样前端拿到的数据默认就是适合公开展示的内容。
 
 ---
 
-## Environment Variables
+## 环境变量
 
-| Name | Required | Description |
+| 变量名 | 必填 | 说明 |
 | --- | --- | --- |
-| `MEMOS_BASE_URL` | Yes | Your Memos base URL, e.g. `https://memos.example.com` |
-| `MEMOS_TOKEN` | Yes | Memos API token used by the Worker |
+| `MEMOS_BASE_URL` | 是 | Memos 源站地址，例如 `https://memos.example.com` |
+| `MEMOS_TOKEN` | 是 | Worker 代理请求时使用的 Memos API Token |
 
 ---
 
-## Quick Start
+## 快速开始
 
-### 1. Install Wrangler
+### 1. 安装 Wrangler
 
 ```bash
 npm install -g wrangler
 ```
 
-### 2. Configure the upstream URL
+### 2. 配置上游地址
 
-Edit `wrangler.toml`:
+编辑 `wrangler.toml`：
 
 ```toml
 [vars]
 MEMOS_BASE_URL = "https://your-memos.example.com"
 ```
 
-### 3. Set the secret token
+### 3. 设置密钥
 
 ```bash
 wrangler secret put MEMOS_TOKEN
 ```
 
-### 4. Run locally
+### 4. 本地开发
 
 ```bash
 wrangler dev
 ```
 
-### 5. Deploy
+### 5. 部署到 Cloudflare Workers
 
 ```bash
 wrangler deploy
@@ -112,21 +122,21 @@ wrangler deploy
 
 ---
 
-## Example Requests
+## 示例请求
 
-### Health-like config check
+### 检查配置是否生效
 
 ```bash
 curl 'https://your-worker.example.com/test'
 ```
 
-### Get public memos
+### 获取公开 memos 列表
 
 ```bash
 curl 'https://your-worker.example.com/api/v1/memos?pageSize=10'
 ```
 
-### Load uploaded files through the proxy
+### 通过代理访问上传文件
 
 ```bash
 curl 'https://your-worker.example.com/file/xxx'
@@ -134,12 +144,12 @@ curl 'https://your-worker.example.com/file/xxx'
 
 ---
 
-## Project Structure
+## 项目结构
 
 ```text
 .
-├── worker.js        # Cloudflare Worker implementation
-├── wrangler.toml    # Worker configuration
+├── worker.js        # Cloudflare Worker 实现
+├── wrangler.toml    # Worker 配置文件
 ├── README.md
 ├── CONTRIBUTING.md
 ├── SECURITY.md
@@ -148,44 +158,44 @@ curl 'https://your-worker.example.com/file/xxx'
 
 ---
 
-## Common Use Cases
+## 典型使用场景
 
-- a public **microblog / shuoshuo** page backed by Memos
-- a personal website that shows recent public notes
-- a frontend app that should only receive **public** memo data
-- a lightweight proxy layer before adding more custom business logic
-
----
-
-## Notes and Limitations
-
-- The current filtering logic mainly targets memo list responses under `/api/v1/memos`.
-- If you need stricter access control, request signing, rate limiting, or route-specific policies, extend the Worker before production use.
-- CORS is currently configured broadly for convenience; tighten it for real deployments.
+- 博客中的 **说说 / 动态 / 微博客** 页面
+- 个人主页中展示最近公开 memo
+- 前端应用只想读取 **PUBLIC** 可见内容
+- 在更复杂网关出现之前，先用一个简单代理层完成公开访问
 
 ---
 
-## Security Notes
+## 注意事项与限制
 
-- Never place `MEMOS_TOKEN` in frontend code.
-- Store secrets with Cloudflare Workers secrets.
-- Use a dedicated token with the minimum permissions your use case requires.
-- Review whether your upstream Memos instance exposes any routes you do not want to proxy publicly.
+- 当前过滤逻辑主要针对 `/api/v1/memos` 列表接口。
+- 如果你需要更严格的鉴权、签名、限流、路由级权限控制，建议在此模板基础上继续扩展。
+- 当前 CORS 配置偏宽松，正式上线时建议收紧允许来源。
 
 ---
 
-## Who This Template Is For
+## 安全说明
 
-This template is a good fit if you want:
+- 不要把 `MEMOS_TOKEN` 放进前端代码。
+- 敏感信息请通过 Cloudflare Workers Secrets 管理。
+- 建议使用权限尽可能小的专用 Token。
+- 在公开服务前，先确认你的上游 Memos 实例中没有不应该被代理出去的路径。
 
-- a fast **starter proxy** for self-hosted Memos
-- a public content feed for your website
-- a simple Worker that you can fork and customize
+---
 
-If you need a complete production gateway with authentication, observability, and route-level authorization, treat this repository as a foundation rather than a finished platform.
+## 适合哪些人使用
+
+这个模板适合你，如果你希望：
+
+- 快速搭一个 **Memos 公开代理**
+- 为网站提供一个可公开访问的 memo 数据源
+- 以最小成本 fork 一个可以继续二次开发的 Worker 模板
+
+如果你需要完整的生产级 API 网关、鉴权体系、监控与审计，那么更适合把这个仓库当作基础骨架，而不是最终成品。
 
 ---
 
 ## License
 
-Released under the repository license.
+本项目遵循仓库中的开源许可证。
